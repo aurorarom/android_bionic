@@ -40,7 +40,14 @@
 struct md5 {
   unsigned int sz[2];
   u_int32_t counter[4];
+<<<<<<< HEAD
   unsigned char save[64];
+=======
+  union {
+    unsigned char save[64];
+    u_int32_t save32[16];
+  };
+>>>>>>> b116fdf... Add md5 back to libc/bionic for targets that need it.
 };
 
 typedef struct md5 MD5_CTX;

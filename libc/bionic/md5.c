@@ -231,7 +231,11 @@ MD5_Update (struct md5 *m, const void *v, size_t len)
       }
       calc(m, current);
 #else
+<<<<<<< HEAD
       calc(m, (u_int32_t*)m->save);
+=======
+      calc(m, m->save32);
+>>>>>>> b116fdf... Add md5 back to libc/bionic for targets that need it.
 #endif
       offset = 0;
     }
