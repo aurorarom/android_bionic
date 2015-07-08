@@ -347,6 +347,7 @@ static void soinfo_free(soinfo* si) {
     sonext = prev;
   }
 
+  si->~soinfo();
   g_soinfo_allocator.free(si);
 }
 
