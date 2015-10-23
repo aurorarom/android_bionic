@@ -367,6 +367,7 @@ libm_common_cflags := \
     -std=c99 \
     -O3 \
     -include $(LOCAL_PATH)/freebsd-compat.h \
+    -Werror \
     -Wno-missing-braces \
     -Wno-parentheses \
     -Wno-sign-compare \
