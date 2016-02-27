@@ -59,6 +59,8 @@ struct rtc_pll_info {
 #define RTC_PIE_OFF _IO('p', 0x06)
 #define RTC_WIE_ON _IO('p', 0x0f)
 #define RTC_WIE_OFF _IO('p', 0x10)
+#define RTC_AUTOBOOT_ON	_IO('p', 0x20)
+#define RTC_AUTOBOOT_OFF _IO('p', 0x21)
 #define RTC_ALM_SET _IOW('p', 0x07, struct rtc_time)
 /* WARNING: DO NOT EDIT, AUTO-GENERATED CODE - SEE TOP FOR INSTRUCTIONS */
 #define RTC_ALM_READ _IOR('p', 0x08, struct rtc_time)

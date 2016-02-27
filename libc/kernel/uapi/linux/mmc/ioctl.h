@@ -42,5 +42,6 @@ struct mmc_ioc_cmd {
 #define mmc_ioc_cmd_set_data(ic, ptr) ic.data_ptr = (__u64)(unsigned long) ptr
 /* WARNING: DO NOT EDIT, AUTO-GENERATED CODE - SEE TOP FOR INSTRUCTIONS */
 #define MMC_IOC_CMD _IOWR(MMC_BLOCK_MAJOR, 0, struct mmc_ioc_cmd)
-#define MMC_IOC_MAX_BYTES (512L * 256)
+#define MMC_IOC_FFU_CMD _IOWR(MMC_BLOCK_MAJOR, 1, struct mmc_ioc_cmd)
+#define MMC_IOC_MAX_BYTES (512L * 1024)
 #endif

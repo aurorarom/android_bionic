@@ -1,3 +1,8 @@
+/*
+* Copyright (C) 2014 MediaTek Inc.
+* Modification based on code covered by the mentioned copyright
+* and/or permission notice(s).
+*/
 /*	$NetBSD: getaddrinfo.c,v 1.82 2006/03/25 12:09:40 rpaulo Exp $	*/
 /*	$KAME: getaddrinfo.c,v 1.29 2000/08/31 17:26:57 itojun Exp $	*/
 
@@ -216,6 +221,36 @@ struct res_target {
 	int n;			/* result length */
 };
 
+/*mtk_net pcscf*/
+struct dns_naptr_t
+{
+	struct dns_naptr_t *next;
+	struct dns_naptr_t *prev;
+	ns_rr rr;
+	uint16_t order;
+	uint16_t preference;
+	char* flags;
+	char* services;
+	char* regexp;
+	char* replacement;
+	char* hostname;
+	uint16_t port;
+};
+
+struct dns_srv_t
+{
+	struct dns_srv_t *next;
+	struct dns_srv_t *prev;
+	ns_rr rr;
+	uint16_t priority;
+	uint16_t weight;
+	uint16_t port;
+	char* target;
+};
+
+#define IMS_SAFE_FREE(ptr) (void)safe_free((void**)(&(ptr)));
+/*mtk_net pcscf end*/
+
 static int str2number(const char *);
 static int explore_fqdn(const struct addrinfo *, const char *,
 	const char *, struct addrinfo **, unsigned netid, unsigned mark);
@@ -430,6 +465,7 @@ android_getaddrinfo_proxy(
 	     strcspn(hostname, " \n\r\t^'\"") != strlen(hostname)) ||
 	    (servname != NULL &&
 	     strcspn(servname, " \n\r\t^'\"") != strlen(servname))) {
+		debug_log("getaddrinfo: dnsproxy bogus hostname >>\n");
 		return EAI_NODATA;
 	}
 
@@ -600,6 +636,8 @@ android_getaddrinfofornet(const char *hostname, const char *servname,
 	struct addrinfo *pai;
 	const struct explore *ex;
 	const char* cache_mode = getenv("ANDROID_DNS_MODE");
+        debug_log("[getaddrinfo]: hostname=%s; servname=%s; cache_mode=%s, netid=%d; mark=%d\n",
+			hostname, servname, cache_mode, netid, mark);
 
 	/* hostname is allowed to be NULL */
 	/* servname is allowed to be NULL */
@@ -620,6 +658,8 @@ android_getaddrinfofornet(const char *hostname, const char *servname,
 	if (hostname == NULL && servname == NULL)
 		return EAI_NONAME;
 	if (hints) {
+                debug_log("[getaddrinfo]: ai_addrlen=%d; ai_canonname=%s; ai_flags=%d; ai_family=%d\n",
+				hints->ai_addrlen, hints->ai_canonname, hints->ai_flags, hints->ai_family);
 		/* error check for hints */
 		if (hints->ai_addrlen || hints->ai_canonname ||
 		    hints->ai_addr || hints->ai_next)
@@ -737,9 +777,19 @@ android_getaddrinfofornet(const char *hostname, const char *servname,
         /*
          * BEGIN ANDROID CHANGES; proxying to the cache
          */
+	int proxy_res;
 	if (cache_mode == NULL || strcmp(cache_mode, "local") != 0) {
 		// we're not the proxy - pass the request to them
-		return android_getaddrinfo_proxy(hostname, servname, hints, res, netid);
+		if ((proxy_res=android_getaddrinfo_proxy(hostname, servname, hints, res, netid)) == 0)
+		{
+			debug_log("getaddrinfo: %s get result from proxy >>\n",hostname);
+			return 0;
+		}
+		else
+		{
+		    debug_log("getaddrinfo: %s NO result from proxy \n",hostname);
+			return proxy_res;
+		}
 	}
 
 	/*
@@ -1920,6 +1970,7 @@ _dns_getaddrinfo(void *rv, void	*cb_data, va_list ap)
 		if (pai->ai_flags & AI_ADDRCONFIG) {
 			query_ipv6 = _have_ipv6(mark);
 			query_ipv4 = _have_ipv4(mark);
+			debug_log("default dns: query_ipv6=%d, query_ipv4=%d\n", query_ipv6, query_ipv4);
 		}
 		if (query_ipv6) {
 			q.qtype = T_AAAA;
@@ -2011,6 +2062,644 @@ _dns_getaddrinfo(void *rv, void	*cb_data, va_list ap)
 	*((struct addrinfo **)rv) = sentinel.ai_next;
 	return NS_SUCCESS;
 }
+
+/*mtk_net pcscf*/
+// Returns 0 on success, else returns non-zero on error 
+static int
+android_naptr_cmd(
+    const char *ifname, const char *sipserver, int af, struct dns_naptr_t *pnaptr)
+{
+	int sock;
+	const int one = 1;
+	struct sockaddr_un proxy_addr;
+	FILE* proxy = NULL;
+	int success = 0;
+	int seq = 1;
+	struct dns_naptr_t *cur;
+	int ret = 0;
+
+	sock = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (sock < 0) {
+		return -1121;
+	}
+
+	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+	memset(&proxy_addr, 0, sizeof(proxy_addr));
+	proxy_addr.sun_family = AF_UNIX;
+	strlcpy(proxy_addr.sun_path, "/dev/socket/netd",
+		sizeof(proxy_addr.sun_path));
+	if (TEMP_FAILURE_RETRY(connect(sock,
+				       (const struct sockaddr*) &proxy_addr,
+				       sizeof(proxy_addr))) != 0) {
+		close(sock);
+		return -1122;
+	}
+    cur = pnaptr;
+	// Send the request.
+	proxy = fdopen(sock, "r+");
+	if(proxy == NULL){
+		close(sock);
+		return -1123;
+	}
+	if (fprintf(proxy, "%d NetInfo setsip %s %s %s %s %d %d",
+		    seq,
+		    ifname == NULL ? "^" : ifname,
+		    sipserver == NULL ? "^" : sipserver,
+		    (cur == NULL || cur->services == NULL) ? "^" : cur->services,
+		    (cur == NULL || cur->hostname == NULL) ? "^" : cur->hostname,
+		    (cur == NULL || cur->port == 0) ? -1 : cur->port,
+		    af) < 0) {
+		ret = -1124;
+		goto exit;
+	}
+	// literal NULL byte at end, required by FrameworkListener
+	if (fputc(0, proxy) == EOF ||
+	    fflush(proxy) != 0) {
+	    ret = -1125;
+		goto exit;
+	}
+
+	char buf[4];
+	// read result code for gethostbyaddr
+	if (fread(buf, 1, sizeof(buf), proxy) != sizeof(buf)) {
+		ret = -1126;
+		goto exit;
+	}
+	
+/*
+	int result_code = (int)strtol(buf, NULL, 10);
+	// verify the code itself
+	if (result_code != DnsProxyQueryResult ) {
+		goto exit;
+	}
+*/
+	success = 1;
+exit:
+	if (proxy != NULL) {
+		fclose(proxy);
+	}
+
+	if (success) {
+		return 0;
+	}
+
+	return ret;
+}
+
+static int 
+parse_dns_rr_string(const void* data, char** string, uint32_t *offset)
+{
+
+	uint8_t* pdata = (((uint8_t*)data)+ *offset);
+	uint8_t len = *pdata;
+	
+	if(len){
+		*string = strndup((const char*)(pdata + 1), len);
+	} else {
+		*string = NULL;
+	}
+	*offset += (1 + len);
+	
+	return 0;	
+}
+
+static void* ims_realloc (void* ptr, uint32_t size)
+{
+	void *ret = NULL;
+	
+	if(ptr == NULL){
+		if(!(ret = calloc(size, 1))){
+			debug_log("Memory allocation (%u) failed", size);
+		}
+	}else{
+		if(!(ret = realloc(ptr, size))){
+			debug_log("Memory reallocation failed");
+		}
+	}
+
+	return ret;
+}
+
+static int 
+ims_strncat(char** dest, const char* src, uint32_t n)
+{
+	uint32_t index = 0;
+	uint32_t cat_size = 0;
+
+	if(!src || !n){
+		return -1;
+	}
+	
+	cat_size = (n > strlen(src)) ? strlen(src) : n;
+
+	if(*dest){
+		index = strlen(*dest);
+		*dest = (char*)ims_realloc(*dest, index + cat_size+1);
+		strncpy(((*dest)+index), src, cat_size+1);
+	}else{
+		*dest = (char*)malloc(cat_size+1);
+		if (*dest == NULL){
+			debug_log("no memery !\n");
+			return -1;
+		} else {
+			strncpy(*dest, src, cat_size+1);
+		}
+	}
+	(*dest)[index + cat_size] = '\0';
+	return 0;
+}
+
+static void safe_free(void** ptr)
+{
+	if(ptr && *ptr){
+		free(*ptr);
+		*ptr = NULL;
+	}
+}
+
+
+static int 
+parse_dns_rr_qname(const void* data, char** name, uint32_t *offset)
+{
+
+	uint8_t* pdata = (((uint8_t*)data) + *offset);
+	unsigned currentPtr = 0; 
+
+	while(*pdata){
+		currentPtr = ((*pdata & 0xC0) == 0xC0);
+
+		if(currentPtr){
+			uint32_t ptr_offset = (*pdata & 0x3F);
+			ptr_offset = ptr_offset << 8 | *(pdata+1);
+			
+			*offset += 2;
+			return parse_dns_rr_qname(data, name, &ptr_offset);
+		}
+		else{
+			uint8_t len;
+
+			if(*name){
+				ims_strncat(name, ".",strlen("."));
+			}	
+
+			len = *pdata;
+			*offset+=1, pdata++;
+
+			ims_strncat(name, (const char*)pdata, len);
+			*offset += len, pdata += len;
+		}
+	}
+
+	*offset+=1;
+
+	return 0;
+}
+
+static int
+dump_naptr_record(struct dns_naptr_t *pnaptr)
+{
+	if(pnaptr == NULL){
+		debug_log("%s: pnaptr == NULL", __FUNCTION__);
+		return -1;
+	}
+	/*skip dump naptr record*/
+	/*
+	debug_log("%s: start:", __FUNCTION__);
+	debug_log("naptr rr name:%s type:%s ttl:%lu rdlen:%d", 
+		ns_rr_name(pnaptr->rr), p_type(ns_rr_type(pnaptr->rr)), ns_rr_ttl(pnaptr->rr), ns_rr_rdlen(pnaptr->rr));
+		
+	debug_log("naptr order:%d, preference:%d, flags:%s, services:%s, regexp:%s, replacement:%s",
+		pnaptr->order, pnaptr->preference, pnaptr->flags, pnaptr->services, pnaptr->regexp, pnaptr->replacement);
+	*/
+	return 0;
+}
+
+static int 
+deserialize_naptr(struct dns_naptr_t *pnaptr, const ns_rr *prr)
+{
+	uint16_t rdlen;
+	const u_char *rdata;
+	uint32_t offset;		
+	//const u_char *edata;
+	
+	offset = 0;
+	rdata = ns_rr_rdata(*prr);
+	rdlen = ns_rr_rdlen(*prr);
+	//edata = rdata + rdlen;
+	memcpy((unsigned char *)&(pnaptr->rr), prr, sizeof(*prr));
+
+	if(rdlen){
+		pnaptr->order = ns_get16(rdata);	rdata += NS_INT16SZ;
+		pnaptr->preference = ns_get16(rdata);	rdata += NS_INT16SZ;
+		
+		parse_dns_rr_string(rdata, &(pnaptr->flags), &offset);
+		debug_log("%s: pnaptr->flags == %s", __FUNCTION__, pnaptr->flags);		
+
+		parse_dns_rr_string(rdata, &(pnaptr->services), &offset);
+
+		parse_dns_rr_string(rdata, &(pnaptr->regexp), &offset);
+
+		parse_dns_rr_qname(rdata, &(pnaptr->replacement), &offset);
+		debug_log("%s: pnaptr->replacement == %s", __FUNCTION__, pnaptr->replacement);
+	}	
+	
+	dump_naptr_record(pnaptr);
+	
+	return 0;
+}
+
+static int 
+deserialize_srv(struct dns_srv_t *psrv, const ns_rr *prr)
+{
+	uint16_t rdlen;
+	const u_char *rdata;
+	uint32_t offset;		
+	//const u_char *edata ;
+	
+	offset = 0;
+	rdata = ns_rr_rdata(*prr);
+	rdlen = ns_rr_rdlen(*prr);
+	//edata = rdata + rdlen;
+	memcpy((unsigned char *)&(psrv->rr), prr, sizeof(*prr));
+
+	if(rdlen){
+		psrv->priority = ns_get16(rdata);	rdata += NS_INT16SZ;
+		psrv->weight = ns_get16(rdata);	rdata += NS_INT16SZ;
+		psrv->port = ns_get16(rdata);	rdata += NS_INT16SZ;
+	
+		parse_dns_rr_qname(rdata, &(psrv->target), &offset);
+		debug_log("%s: psrv->target == %s", __FUNCTION__, psrv->target);
+	}	
+	
+	return 0;
+}
+
+static int
+insert_srv(struct dns_srv_t *header, struct dns_srv_t *elem)
+{
+	struct dns_srv_t *cur;
+	cur = header;
+	
+	while(cur != NULL){
+		debug_log("cur->weight = %d, elem ->weight = %d", cur->weight,elem->weight);
+		if(cur->weight > elem ->weight){
+			elem->prev = cur->prev;
+			cur->prev->next = elem;
+			cur->prev = elem;
+			elem->next = cur;
+			break;
+		} else {
+			if(cur->next == NULL){
+				cur->next = elem;
+				elem->prev = cur;
+				elem->next = NULL;
+				break;
+			} else {
+				cur = cur->next;
+			}
+		}
+	}
+	return 0;
+}
+
+static void
+free_srv_elem(struct dns_srv_t *elem){
+	IMS_SAFE_FREE(elem->target);
+	free(elem);
+	elem = NULL;
+}
+
+static int
+free_srv(struct dns_srv_t *header)
+{
+	struct dns_srv_t *cur;
+	struct dns_srv_t *elem;
+
+	/*free each element */
+	cur = header->next;
+	while(cur != NULL){
+		debug_log("cur->weight = %d", cur->weight);
+		cur->prev->next = cur->next;
+		if(cur->next != NULL)
+			cur->next->prev = cur->prev;
+		elem = cur;
+		cur = cur->next;
+		free_srv_elem(elem);
+	}
+
+	/* free header struct when the list is empty */
+	if(header->next == NULL){
+		free(header);
+	}
+
+	return 0;
+}
+
+static int
+insert_naptr(struct dns_naptr_t *header, struct dns_naptr_t *elem)
+{
+	struct dns_naptr_t *cur;
+	cur = header;
+	
+	while(cur != NULL){
+		debug_log("cur->order = %d, elem ->order = %d", cur->order,elem->order);
+		if(cur->order > elem ->order){
+			elem->prev = cur->prev;
+			cur->prev->next = elem;
+			cur->prev = elem;
+			elem->next = cur;
+			break;
+		} else {
+			if(cur->next == NULL){
+				cur->next = elem;
+				elem->prev = cur;
+				elem->next = NULL;
+				break;
+			} else {
+				cur = cur->next;
+			}
+		}
+	}
+
+	return 0;
+}
+
+static void
+free_naptr_elem(struct dns_naptr_t *elem){
+	IMS_SAFE_FREE(elem->flags);
+	IMS_SAFE_FREE(elem->services);
+	IMS_SAFE_FREE(elem->regexp);
+	IMS_SAFE_FREE(elem->replacement);
+	IMS_SAFE_FREE(elem->hostname);
+	free(elem);
+	elem = NULL;
+}
+
+static int
+free_naptr(struct dns_naptr_t *header)
+{
+	struct dns_naptr_t *cur;
+	struct dns_naptr_t *elem;
+
+	/*free each element */
+	cur = header->next;
+	while(cur != NULL){
+		debug_log("cur->order = %d", cur->order);
+		cur->prev->next = cur->next;
+		if(cur->next != NULL)
+			cur->next->prev = cur->prev;
+		elem = cur;
+		cur = cur->next;
+		free_naptr_elem(elem);
+	}
+
+	/* free header struct when the list is empty */
+	if(header->next == NULL){
+		free(header);
+	}
+
+	return 0;
+}
+
+
+static int 
+parse_srv(const u_char *ans, int ans_len, int type, struct dns_naptr_t *pnaptr, struct dns_srv_t *h_srv)
+{
+    ns_msg handle;
+    int ancount, n, result;
+    ns_rr rr;
+    struct dns_srv_t *psrv;
+    result = 0;
+      
+    if (ns_initparse(ans, ans_len, &handle) >= 0) {
+        // get number of answer records
+        ancount = ns_msg_count(handle, ns_s_an);
+        debug_log("parse_srv ancount = %d, type = %d", ancount, type);       
+
+	    if (type == T_SRV){
+	        for (n = 0; n < ancount; n++) {
+	            if (ns_parserr(&handle, ns_s_an, n, &rr) == 0) {
+	            	psrv = (struct dns_srv_t *)calloc(1, sizeof(struct dns_srv_t));
+					if(psrv == NULL){
+						debug_log("parse_srv no memory for psrv");
+						break;  
+					}
+	                deserialize_srv(psrv, &rr);
+					if( psrv->target != NULL ){
+						debug_log("parse_srv srv port = %d", psrv->port);
+						insert_srv(h_srv, psrv);
+					} else {
+						free_srv_elem(psrv);
+					}
+	            } else {
+	                debug_log("parse_srv srv failed ancount no = %d. errno = %s\n", n, strerror(errno));
+	            }
+	        }
+	    }
+    } else {
+        debug_log("parse_srv failed. %s\n", strerror(errno));
+    }
+	
+    if(h_srv->next){
+    	pnaptr->hostname = strdup(h_srv->next->target);
+    	pnaptr->port = h_srv->next->port;
+    } else {
+		debug_log("parse_srv: no record!");
+	}
+
+    return result;	
+	
+}
+
+static int make_srv_query(struct dns_naptr_t *pnaptr){
+	querybuf *buf;
+	struct res_target q;
+	res_state res;
+    struct dns_srv_t *h_srv = NULL;  
+    
+	memset(&q, 0, sizeof(q));
+	
+	res = __res_get_state();
+	if (res == NULL) {
+		return NS_NOTFOUND;
+	}
+	buf = malloc(sizeof(*buf));
+	if (buf == NULL) {
+		debug_log("make_srv_query no memory!\n");
+		return NS_NOTFOUND;
+	}
+
+	debug_log("make_srv_query start!\n");
+	q.next = NULL;
+	q.name = pnaptr->replacement;
+	q.qclass = C_IN;
+	q.qtype = T_SRV;
+	q.answer = buf->buf;
+	q.anslen = sizeof(buf->buf);
+
+	if (res_queryN(pnaptr->replacement, &q, res) < 0) {
+		__res_put_state(res);
+		free(buf);
+		return NS_NOTFOUND;
+	}
+	debug_log("make_srv_query res_searchN done!\n");
+	h_srv = (struct dns_srv_t *)calloc(1, sizeof(struct dns_srv_t));
+	if(h_srv == NULL){
+		debug_log("make_srv_query no memory for h_srv");
+		free(buf);
+		return -1;
+	}
+	parse_srv(q.answer, q.n, T_SRV, pnaptr, h_srv);	
+    free_srv(h_srv);
+	
+	free(buf);
+	return 0;
+}
+
+static int 
+parse_naptr(const u_char *ans, int ans_len, int type, struct dns_naptr_t *h_naptr)
+{
+    ns_msg handle;
+    int ancount, n, result;
+    ns_rr rr;
+    struct dns_naptr_t *pnaptr = NULL;
+    struct dns_naptr_t *cur = NULL;
+    result = 0;
+      
+    if (ns_initparse(ans, ans_len, &handle) >= 0) {
+        // get number of answer records
+        ancount = ns_msg_count(handle, ns_s_an);
+        debug_log("parse_naptr ancount = %d, type = %d", ancount, type);       
+        if (type == T_NAPTR){
+ 	        for (n = 0; n < ancount; n++) {
+	            if (ns_parserr(&handle, ns_s_an, n, &rr) == 0) {
+	            	pnaptr = (struct dns_naptr_t *)calloc(1, sizeof(struct dns_naptr_t));
+					if(pnaptr == NULL){
+						debug_log("parse_naptr: no memory for naptr");
+						return -1;
+					}
+	                deserialize_naptr(pnaptr, &rr);
+					if(pnaptr->services && (0 == strcmp(pnaptr->flags, "s") || 0 == strcmp(pnaptr->flags, "S")) ){
+						debug_log("insert naptr for %d times", n);
+						insert_naptr(h_naptr, pnaptr);
+					} else {
+						free_naptr_elem(pnaptr);
+					}
+	            } else {
+	                debug_log("parse_naptr failed ancount no = %d. errno = %s\n", n, strerror(errno));
+	            }
+	        }
+	        cur = h_naptr->next;
+	        while(cur != NULL){
+	        	make_srv_query(cur);
+	        	cur = cur->next;
+	        }
+	    }
+    } else {
+        debug_log("parse_naptr failed. %s\n", strerror(errno));
+    }
+
+    return result;		
+}
+static int parse_numeric_naptr(const char *name, struct dns_naptr_t *h_naptr)
+{
+    struct dns_naptr_t *pnaptr = NULL;
+	char *srv[3] = {"SIP+D2U","SIP+D2T", "SIPS+D2T"};
+	uint16_t i;
+	for(i=0; i<3; i++){
+		pnaptr = (struct dns_naptr_t *)calloc(1, sizeof(struct dns_naptr_t));
+		if(pnaptr == NULL){
+			debug_log("parse_numeric_naptr error:no mem!");
+			return -1;
+		}
+		pnaptr->services = strdup(srv[i]);
+		pnaptr->hostname = strdup(name);
+		pnaptr->port = 5060;
+		pnaptr->order = i;
+		insert_naptr(h_naptr, pnaptr);
+	}
+	return 0;
+}
+/*support naprt type query by mtk80842*/
+int
+naptr_srv_query(const char *ifname, const char *name, int numeric, int af)
+{
+	struct res_target q;
+	res_state res;
+	querybuf *buf = NULL;	
+    struct dns_naptr_t *h_naptr = NULL;
+	int result = 0;
+
+	debug_log("++naptr_srv_query start: ifname=%s, name=%s, numeric=%d, af=%d",
+			ifname, name, numeric, af);
+	
+	memset(&q, 0, sizeof(q));
+	
+	h_naptr = (struct dns_naptr_t *)calloc(1, sizeof(struct dns_naptr_t));
+	if(h_naptr == NULL){
+		debug_log("naptr_srv_query: calloc h_naptr failed");
+		return -1;
+	}
+	if(numeric){
+		debug_log("naptr_srv_query numeric host:%s", name);
+		result = parse_numeric_naptr(name, h_naptr);
+		if(result){
+			debug_log("parse_numeric_naptr error!");
+			return result;
+		}
+		goto send_cmd;
+	}
+	res = __res_get_state();
+	if (res == NULL) {
+		debug_log("naptr_srv_query can't get res!\n");
+		free(h_naptr);
+		return NS_NOTFOUND;
+	}
+	buf = malloc(sizeof(*buf));
+	if (buf == NULL) {
+		debug_log("naptr_srv_query: malloc buf failed");
+		free(h_naptr);
+		return NS_NOTFOUND;
+	}
+
+	q.next = NULL;
+	q.name = name;
+	q.qclass = C_IN;
+	q.qtype = T_NAPTR;
+	q.answer = buf->buf;
+	q.anslen = sizeof(buf->buf);
+
+	if (res_queryN(name, &q, res) < 0) {
+		__res_put_state(res);
+		free(buf);
+		free(h_naptr);
+		return NS_NOTFOUND;
+	}
+	debug_log("naptr_srv_query res_searchN done!\n");
+	
+    parse_naptr(q.answer, q.n, T_NAPTR, h_naptr);	
+
+send_cmd:
+	{
+		struct dns_naptr_t *cur;
+		cur = h_naptr->next;
+	    while(cur != NULL){
+	        debug_log("!!!!final result: services=%s, hostname=%s, port=%d",
+	        	cur->services, cur->hostname, cur->port);
+			result = android_naptr_cmd(ifname, name, af, cur);
+			if(result < 0){
+				return result;
+			}
+	        cur = cur->next;
+	    }
+	}
+	free_naptr(h_naptr);
+	free(buf);
+	
+	debug_log("--naptr_srv_query done!\n");
+	return NS_SUCCESS;
+}
+/*mtk_net pcscf end*/
 
 static void
 _sethtent(FILE **hostf)
@@ -2175,7 +2864,7 @@ res_queryN(const char *name, /* domain name */ struct res_target *target,
 		if (res->options & RES_DEBUG)
 			printf(";; res_nquery(%s, %d, %d)\n", name, class, type);
 #endif
-
+		debug_log("res_queryN name = %s, class = %d, type = %d", name, class, type);
 		n = res_nmkquery(res, QUERY, name, class, type, NULL, 0, NULL,
 		    buf, sizeof(buf));
 #ifdef RES_USE_EDNS0
@@ -2237,6 +2926,7 @@ res_queryN(const char *name, /* domain name */ struct res_target *target,
 		}
 		return -1;
 	}
+	debug_log("res_queryN name = %s succeed", name);
 	return ancount;
 }
 

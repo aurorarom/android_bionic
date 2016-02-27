@@ -28,7 +28,6 @@ libm_common_src_files += \
     upstream-freebsd/lib/msun/src/e_atanhf.c \
     upstream-freebsd/lib/msun/src/e_cosh.c \
     upstream-freebsd/lib/msun/src/e_coshf.c \
-    upstream-freebsd/lib/msun/src/e_exp.c \
     upstream-freebsd/lib/msun/src/e_expf.c \
     upstream-freebsd/lib/msun/src/e_fmod.c \
     upstream-freebsd/lib/msun/src/e_fmodf.c \
@@ -52,13 +51,10 @@ libm_common_src_files += \
     upstream-freebsd/lib/msun/src/e_log10f.c \
     upstream-freebsd/lib/msun/src/e_log2.c \
     upstream-freebsd/lib/msun/src/e_log2f.c \
-    upstream-freebsd/lib/msun/src/e_log.c \
     upstream-freebsd/lib/msun/src/e_logf.c \
-    upstream-freebsd/lib/msun/src/e_pow.c \
     upstream-freebsd/lib/msun/src/e_powf.c \
     upstream-freebsd/lib/msun/src/e_remainder.c \
     upstream-freebsd/lib/msun/src/e_remainderf.c \
-    upstream-freebsd/lib/msun/src/e_rem_pio2.c \
     upstream-freebsd/lib/msun/src/e_rem_pio2f.c \
     upstream-freebsd/lib/msun/src/e_scalb.c \
     upstream-freebsd/lib/msun/src/e_scalbf.c \
@@ -71,14 +67,12 @@ libm_common_src_files += \
     upstream-freebsd/lib/msun/src/k_cosf.c \
     upstream-freebsd/lib/msun/src/k_exp.c \
     upstream-freebsd/lib/msun/src/k_expf.c \
-    upstream-freebsd/lib/msun/src/k_rem_pio2.c \
     upstream-freebsd/lib/msun/src/k_sin.c \
     upstream-freebsd/lib/msun/src/k_sinf.c \
     upstream-freebsd/lib/msun/src/k_tan.c \
     upstream-freebsd/lib/msun/src/k_tanf.c \
     upstream-freebsd/lib/msun/src/s_asinh.c \
     upstream-freebsd/lib/msun/src/s_asinhf.c \
-    upstream-freebsd/lib/msun/src/s_atan.c \
     upstream-freebsd/lib/msun/src/s_atanf.c \
     upstream-freebsd/lib/msun/src/s_carg.c \
     upstream-freebsd/lib/msun/src/s_cargf.c \
@@ -96,7 +90,6 @@ libm_common_src_files += \
     upstream-freebsd/lib/msun/src/s_conjf.c \
     upstream-freebsd/lib/msun/src/s_copysign.c \
     upstream-freebsd/lib/msun/src/s_copysignf.c \
-    upstream-freebsd/lib/msun/src/s_cos.c \
     upstream-freebsd/lib/msun/src/s_cosf.c \
     upstream-freebsd/lib/msun/src/s_cproj.c \
     upstream-freebsd/lib/msun/src/s_cprojf.c \
@@ -161,7 +154,6 @@ libm_common_src_files += \
     upstream-freebsd/lib/msun/src/s_signgam.c \
     upstream-freebsd/lib/msun/src/s_significand.c \
     upstream-freebsd/lib/msun/src/s_significandf.c \
-    upstream-freebsd/lib/msun/src/s_sin.c \
     upstream-freebsd/lib/msun/src/s_sinf.c \
     upstream-freebsd/lib/msun/src/s_tan.c \
     upstream-freebsd/lib/msun/src/s_tanf.c \
@@ -260,15 +252,53 @@ LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_ARM_MODE := arm
 LOCAL_CFLAGS := $(libm_common_cflags)
 LOCAL_C_INCLUDES += $(libm_common_includes)
-LOCAL_SRC_FILES := $(libm_common_src_files)
 LOCAL_SYSTEM_SHARED_LIBRARIES := libc
 
 # arch-specific settings
 LOCAL_C_INCLUDES_arm := $(LOCAL_PATH)/arm
 LOCAL_SRC_FILES_arm := arm/fenv.c
 
+libm_c_src_files :=  \
+	upstream-freebsd/lib/msun/src/e_exp.c \
+	upstream-freebsd/lib/msun/src/e_log.c \
+	upstream-freebsd/lib/msun/src/k_rem_pio2.c \
+	upstream-freebsd/lib/msun/src/e_rem_pio2.c \
+	upstream-freebsd/lib/msun/src/s_atan.c \
+	upstream-freebsd/lib/msun/src/s_cos.c \
+    upstream-freebsd/lib/msun/src/e_pow.c \
+	upstream-freebsd/lib/msun/src/s_sin.c
+
+ifneq ($(MTK_POW_OPT), NONE)
+
+ ifneq (, $(filter $(TARGET_ARCH), arm64 arm))
+  ifneq (, $(wildcard $(LOCAL_PATH)/$(TARGET_ARCH)/$(TARGET_CPU_VARIANT)/$(TARGET_CPU_VARIANT).mk))
+   include $(LOCAL_PATH)/$(TARGET_ARCH)/$(TARGET_CPU_VARIANT)/$(TARGET_CPU_VARIANT).mk
+  else
+	LOCAL_SRC_FILES_$(TARGET_ARCH) += $(libm_c_src_files)
+  endif
+ else
+  libm_common_src_files += $(libm_c_src_files)
+ endif # ifneq (, $(filter $(TARGET_ARCH), arm64 arm))
+
+ ifdef TARGET_2ND_ARCH
+  ifeq ($(TARGET_2ND_ARCH), arm)
+   ifneq (, $(wildcard $(LOCAL_PATH)/$(TARGET_2ND_ARCH)/$(TARGET_2ND_CPU_VARIANT)/$(TARGET_2ND_CPU_VARIANT).mk))
+    include $(LOCAL_PATH)/$(TARGET_2ND_ARCH)/$(TARGET_2ND_CPU_VARIANT)/$(TARGET_2ND_CPU_VARIANT).mk
+   else
+	LOCAL_SRC_FILES_$(TARGET_2ND_ARCH) += $(libm_c_src_files)
+   endif
+  endif # ifeq ($(TARGET_2ND_ARCH), arm)
+ endif # ifdef TARGET_2ND_ARCH
+
+else
+ libm_common_src_files += $(libm_c_src_files)
+endif # ifneq ($(MTK_POW_OPT),NONE)
+
+
+LOCAL_SRC_FILES := $(libm_common_src_files)
+
 LOCAL_C_INCLUDES_arm64 := $(libm_ld_includes)
-LOCAL_SRC_FILES_arm64 := arm64/fenv.c $(libm_ld_src_files)
+LOCAL_SRC_FILES_arm64 += arm64/fenv.c $(libm_ld_src_files)
 
 LOCAL_C_INCLUDES_x86 := $(LOCAL_PATH)/i387
 LOCAL_SRC_FILES_x86 := i387/fenv.c

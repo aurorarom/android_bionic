@@ -62,6 +62,98 @@
         .syntax unified
         .fpu    neon
 
+/* Temporarily use memcpy */
+        .global vfp_copy_forward_not_align
+        .type vfp_copy_forward_not_align, %function
+        .align 4
+vfp_copy_forward_not_align:
+        .fnstart
+        stmfd   sp!, {r0-r3, lr}
+        mov     r3, r0
+        mov     r0, r1
+        mov     r1, r3
+        bl      memcpy
+        ldmfd   sp!, {r0-r3, lr}
+        bx      lr
+        .fnend
+ 
+        .global vfp_copy_backward_not_align
+        .type vfp_copy_backward_not_align, %function
+        .align 4
+vfp_copy_backward_not_align:
+        .fnstart  
+        stmfd   sp!, {r0-r5, lr}
+
+vfp_copy_backward_pld:
+        subs    r2, r2, #0x40
+        blt     finish_vfp_copy_backward
+        mov     r5, r1
+        sub     r5, r5, #0x100        
+        pld     [r5, #0x00]  
+        pld     [r5, #0x40] 
+        pld     [r5, #0x80] 
+        pld     [r5, #0xc0] 
+        sub     r1, r1, #0x40
+        sub     r0, r0, #0x40
+vfp_copy_backward_start_copy:
+                mov     r5, r0
+        mov     r4, r1 
+                vld1.8      {d0 - d3}, [r4]!
+        vld1.8      {d4 - d7}, [r4]!
+        vst1.8      {d0 - d3}, [r5, :128]!
+        vst1.8      {d4 - d7}, [r5, :128]!
+        //
+        subs    r2, r2, #0x40
+        blt     finish_vfp_copy_backward
+        sub     r1, r1, #0x40
+        sub     r0, r0, #0x40
+        mov     r5, r0
+        mov     r4, r1 
+                vld1.8      {d0 - d3}, [r4]!
+        vld1.8      {d4 - d7}, [r4]!
+        vst1.8      {d0 - d3}, [r5, :128]!
+        vst1.8      {d4 - d7}, [r5, :128]!
+        //
+        subs    r2, r2, #0x40
+        blt     finish_vfp_copy_backward
+        sub     r1, r1, #0x40
+        sub     r0, r0, #0x40
+        mov     r5, r0
+        mov     r4, r1 
+                vld1.8      {d0 - d3}, [r4]!
+        vld1.8      {d4 - d7}, [r4]!
+        vst1.8      {d0 - d3}, [r5, :128]!
+        vst1.8      {d4 - d7}, [r5, :128]!
+        //
+        subs    r2, r2, #0x40
+        blt     finish_vfp_copy_backward
+        sub     r1, r1, #0x40
+        sub     r0, r0, #0x40
+        mov     r5, r0  
+        mov     r4, r1 
+                vld1.8      {d0 - d3}, [r4]!
+        vld1.8      {d4 - d7}, [r4]!
+        vst1.8      {d0 - d3}, [r5, :128]!
+        vst1.8      {d4 - d7}, [r5, :128]! 
+        b       vfp_copy_backward_pld
+
+finish_vfp_copy_backward:
+                cmp         r3, #0x00  
+                beq finish_vfp_copy_backward_end
+        sub     r1, r1, #0x20
+        pld     [r1, #0x00]  
+                sub     r0, r0, #0x20 
+        vld1.8  {d0-d3}, [r1]!
+        vst1.8  {d0-d3}, [r0, :128]! 
+finish_vfp_copy_backward_end:               
+        ldmfd   sp!, {r0-r5, lr} 
+        bx      lr
+        .fnend
+        
+        .global memcpy
+        .type memcpy, %function
+        .align 4
+
 ENTRY(__memcpy_chk)
         cmp     r2, r3
         bhi     __memcpy_chk_fail
@@ -69,9 +161,13 @@ ENTRY(__memcpy_chk)
         // Fall through to memcpy...
 END(__memcpy_chk)
 
+#define CACHE_LINE_SIZE 64
 ENTRY(memcpy)
-        pld     [r1, #64]
+        pld     [r1, #(CACHE_LINE_SIZE * 0)]
+        .word 0xf590f000  // pldw         [r0, #(CACHE_LINE_SIZE * 0)]
         push    {r0, lr}
+        pld         [r1, #(CACHE_LINE_SIZE * 1)]
+        .save   {r0, lr}
         .cfi_def_cfa_offset 8
         .cfi_rel_offset r0, 0
         .cfi_rel_offset lr, 4
@@ -84,6 +180,7 @@ END(memcpy)
 ENTRY_PRIVATE(__memcpy_chk_fail)
         // Preserve lr for backtrace.
         push    {lr}
+        .save   {lr}
         .cfi_def_cfa_offset 4
         .cfi_rel_offset lr, 0
 
