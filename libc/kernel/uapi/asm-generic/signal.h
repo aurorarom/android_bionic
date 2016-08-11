@@ -83,7 +83,11 @@
 /* WARNING: DO NOT EDIT, AUTO-GENERATED CODE - SEE TOP FOR INSTRUCTIONS */
 #define SA_ONESHOT SA_RESETHAND
 #define MINSIGSTKSZ 2048
+#if defined (__LP64__) && defined(__aarch64__)
+#define SIGSTKSZ 12288
+#else
 #define SIGSTKSZ 8192
+#endif
 #ifndef __ASSEMBLY__
 /* WARNING: DO NOT EDIT, AUTO-GENERATED CODE - SEE TOP FOR INSTRUCTIONS */
 typedef struct {

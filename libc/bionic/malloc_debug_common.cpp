@@ -1,4 +1,9 @@
 /*
+* Copyright (C) 2014 MediaTek Inc.
+* Modification based on code covered by the mentioned copyright
+* and/or permission notice(s).
+*/
+/*
  * Copyright (C) 2009 The Android Open Source Project
  * All rights reserved.
  *
@@ -81,7 +86,11 @@ static const MallocDebug __libc_malloc_default_dispatch __attribute__((aligned(3
 };
 
 // Selector of dispatch table to use for dispatching malloc calls.
+#ifdef _MTK_MALLOC_DEBUG_
+const MallocDebug* __libc_malloc_dispatch = &__libc_malloc_default_dispatch;
+#else
 static const MallocDebug* __libc_malloc_dispatch = &__libc_malloc_default_dispatch;
+#endif
 
 // Handle to shared library where actual memory allocation is implemented.
 // This library is loaded and memory allocation calls are redirected there
@@ -295,11 +304,6 @@ extern "C" void* valloc(size_t bytes) {
 #include <stdio.h>
 #include "private/libc_logging.h"
 
-unsigned int malloc_sig_enabled = 0;
-unsigned int max_allocation_limit;
-unsigned int min_allocation_report_limit;
-const char* process_name;
-
 template<typename FunctionType>
 static void InitMallocFunction(void* malloc_impl_handler, FunctionType* func, const char* prefix, const char* suffix) {
   char symbol[128];
@@ -387,9 +391,6 @@ static void malloc_init_impl() {
     case 10:
       so_name = "libc_malloc_debug_leak.so";
       break;
-    case 15:
-      so_name = "libefence.so";
-      break;
     case 20:
       // Quick check: debug level 20 can only be handled in emulator.
       if (!qemu_running) {
@@ -403,21 +404,6 @@ static void malloc_init_impl() {
         return;
       }
       so_name = "libc_malloc_debug_qemu.so";
-      break;
-    case 40:
-      malloc_sig_enabled = 1;
-      char debug_proc_size[PROP_VALUE_MAX];
-      if (__system_property_get("libc.debug.malloc.maxprocsize", debug_proc_size))
-        max_allocation_limit = atoi(debug_proc_size);
-      else
-        max_allocation_limit = 30 * 1024 * 1024; // In Bytes [Default is 30 MB]
-      if (__system_property_get("libc.debug.malloc.minalloclim", debug_proc_size))
-        min_allocation_report_limit = atoi(debug_proc_size);
-      else
-        min_allocation_report_limit = 10 * 1024; // In Bytes [Default is 10 KB]
-      process_name = getprogname();
-
-      so_name = "libc_malloc_debug_leak.so";
       break;
     default:
       error_log("%s: Debug level %d is unknown\n", getprogname(), g_malloc_debug_level);
@@ -476,14 +462,8 @@ static void malloc_init_impl() {
     case 10:
       InitMalloc(malloc_impl_handle, &malloc_dispatch_table, "chk");
       break;
-    case 15:
-      InitMalloc(malloc_impl_handle, &malloc_dispatch_table, "efence");
-      break;
     case 20:
       InitMalloc(malloc_impl_handle, &malloc_dispatch_table, "qemu_instrumented");
-      break;
-    case 40:
-      InitMalloc(malloc_impl_handle, &malloc_dispatch_table, "chk");
       break;
     default:
       break;

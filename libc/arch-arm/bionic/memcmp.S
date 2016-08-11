@@ -40,8 +40,6 @@
  * Optimized memcmp() for Cortex-A9.
  */
 
-.syntax unified
-
 ENTRY(memcmp)
         pld         [r0, #(CACHE_LINE_SIZE * 0)]
         pld         [r0, #(CACHE_LINE_SIZE * 1)]
@@ -163,25 +161,25 @@ ENTRY(memcmp)
         eors        r0, r0, ip
         ldreq       r0, [r4], #4
         ldreq       ip, [r1, #4]!
-        eorseq      r0, r0, lr
+        eoreqs      r0, r0, lr
         ldreq       r0, [r4], #4
         ldreq       lr, [r1, #4]!
-        eorseq      r0, r0, ip
+        eoreqs      r0, r0, ip
         ldreq       r0, [r4], #4
         ldreq       ip, [r1, #4]!
-        eorseq      r0, r0, lr
+        eoreqs      r0, r0, lr
         ldreq       r0, [r4], #4
         ldreq       lr, [r1, #4]!
-        eorseq      r0, r0, ip
+        eoreqs      r0, r0, ip
         ldreq       r0, [r4], #4
         ldreq       ip, [r1, #4]!
-        eorseq      r0, r0, lr
+        eoreqs      r0, r0, lr
         ldreq       r0, [r4], #4
         ldreq       lr, [r1, #4]!
-        eorseq      r0, r0, ip
+        eoreqs      r0, r0, ip
         ldreq       r0, [r4], #4
         ldreq       ip, [r1, #4]!
-        eorseq      r0, r0, lr
+        eoreqs      r0, r0, lr
         bne         2f
         subs        r2, r2, #32
         bhs         0b
@@ -221,7 +219,8 @@ ENTRY(memcmp)
         bne         8b
 
 9:      /* restore registers and return */
-        ldmfd       sp!, {r4, pc}
+        ldmfd       sp!, {r4, lr}
+        bx          lr
 
 10:     /* process less than 12 bytes */
         cmp         r2, #0
@@ -264,17 +263,17 @@ ENTRY(memcmp)
         ldreq       lr, [r1], #4
         ldreq       r0, [r4], #4
         orreq       ip, ip, lr, lsl #16
-        eorseq      r0, r0, ip
+        eoreqs      r0, r0, ip
         moveq       ip, lr, lsr #16
         ldreq       lr, [r1], #4
         ldreq       r0, [r4], #4
         orreq       ip, ip, lr, lsl #16
-        eorseq      r0, r0, ip
+        eoreqs      r0, r0, ip
         moveq       ip, lr, lsr #16
         ldreq       lr, [r1], #4
         ldreq       r0, [r4], #4
         orreq       ip, ip, lr, lsl #16
-        eorseq      r0, r0, ip
+        eoreqs      r0, r0, ip
         bne         7f
         subs        r2, r2, #16
         bhs         6b
@@ -318,7 +317,7 @@ ENTRY(memcmp)
         ldreq       r7, [r1], #4
         ldreq       r0, [r4], #4
         orreq       ip, ip, r7, lsl r6
-        eorseq      r0, r0, ip
+        eoreqs      r0, r0, ip
         bne         7f
         subs        r2, r2, #8
         bhs         6b

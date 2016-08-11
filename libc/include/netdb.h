@@ -1,3 +1,8 @@
+/*
+* Copyright (C) 2014 MediaTek Inc.
+* Modification based on code covered by the mentioned copyright
+* and/or permission notice(s).
+*/
 /*-
  * Copyright (c) 1980, 1983, 1988, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -240,6 +245,9 @@ int innetgr(const char *, const char *, const char *, const char *);
 void sethostent(int);
 void setnetent(int);
 void setprotoent(int);
+/*mtk_net pcscf*/
+int naptr_srv_query(const char *ifname, const char *name, int numeric, int af);
+/*mtk_net pcscf end*/
 int getaddrinfo(const char *, const char *, const struct addrinfo *, struct addrinfo **);
 int getnameinfo(const struct sockaddr *, socklen_t, char *, size_t, char *, size_t, int);
 void freeaddrinfo(struct addrinfo *);

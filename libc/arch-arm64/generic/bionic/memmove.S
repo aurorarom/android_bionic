@@ -35,6 +35,10 @@
 #include <private/bionic_asm.h>
 
 /* Parameters and result.  */
+#ifdef BCOPY
+#define origdstin	x1
+#define origsrc	x0
+#endif
 #define dstin	x0
 #define src	x1
 #define count	x2
@@ -55,7 +59,13 @@
 #define D_l	x13
 #define D_h	x14
 
-#if defined(WMEMMOVE)
+#ifdef BCOPY
+ENTRY(bcopy)
+	/* Swap src and dst so that a branch to memcpy doesn't cause issues. */
+	mov	tmp1, origsrc
+	mov	origsrc, origdstin
+	mov	origdstin, tmp1
+#elif defined(WMEMMOVE)
 ENTRY(wmemmove)
 	lsl	count, count, #2
 #else
@@ -322,7 +332,9 @@ ENTRY(memmove)
 	tst	count, #0x3f
 	b.ne	.Ltail63down
 	ret
-#if defined(WMEMMOVE)
+#ifdef BCOPY
+END(bcopy)
+#elif defined(WMEMMOVE)
 END(wmemmove)
 #else
 END(memmove)

@@ -1,3 +1,8 @@
+/*
+* Copyright (C) 2014 MediaTek Inc.
+* Modification based on code covered by the mentioned copyright
+* and/or permission notice(s).
+*/
 /*	$NetBSD: resolv.h,v 1.31 2005/12/26 19:01:47 perry Exp $	*/
 
 /*
@@ -59,6 +64,10 @@
 #include <resolv.h>
 #include "resolv_static.h"
 #include <net/if.h>
+
+#include "private/libc_logging.h"
+#define debug_log(format, ...)  \
+    __libc_format_log(ANDROID_LOG_DEBUG, "libc-netbsd", (format), ##__VA_ARGS__ )
 
 /* Despite this file's name, it's part of libresolv. On Android, that means it's part of libc :-( */
 #pragma GCC visibility push(default)

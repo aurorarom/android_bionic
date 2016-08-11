@@ -1,4 +1,9 @@
 /*
+* Copyright (C) 2014 MediaTek Inc.
+* Modification based on code covered by the mentioned copyright
+* and/or permission notice(s).
+*/
+/*
   This is a version (aka dlmalloc) of malloc/free/realloc written by
   Doug Lea and released to the public domain, as explained at
   http://creativecommons.org/publicdomain/zero/1.0/ Send questions,
@@ -5235,7 +5240,6 @@ void* dlrealloc(void* oldmem, size_t bytes) {
       mchunkptr newp = try_realloc_chunk(m, oldp, nb, 1);
       POSTACTION(m);
       if (newp != 0) {
-        check_inuse_chunk(m, newp);
         mem = chunk2mem(newp);
       }
       else {
@@ -5273,7 +5277,6 @@ void* dlrealloc_in_place(void* oldmem, size_t bytes) {
         mchunkptr newp = try_realloc_chunk(m, oldp, nb, 0);
         POSTACTION(m);
         if (newp == oldp) {
-          check_inuse_chunk(m, newp);
           mem = oldmem;
         }
       }
@@ -5794,7 +5797,6 @@ void* mspace_realloc(mspace msp, void* oldmem, size_t bytes) {
       mchunkptr newp = try_realloc_chunk(m, oldp, nb, 1);
       POSTACTION(m);
       if (newp != 0) {
-        check_inuse_chunk(m, newp);
         mem = chunk2mem(newp);
       }
       else {
@@ -5833,7 +5835,6 @@ void* mspace_realloc_in_place(mspace msp, void* oldmem, size_t bytes) {
         mchunkptr newp = try_realloc_chunk(m, oldp, nb, 0);
         POSTACTION(m);
         if (newp == oldp) {
-          check_inuse_chunk(m, newp);
           mem = oldmem;
         }
       }

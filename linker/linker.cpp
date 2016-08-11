@@ -1,4 +1,9 @@
 /*
+* Copyright (C) 2014 MediaTek Inc.
+* Modification based on code covered by the mentioned copyright
+* and/or permission notice(s).
+*/
+/*
  * Copyright (C) 2008, 2009 The Android Open Source Project
  * All rights reserved.
  *
@@ -94,9 +99,15 @@ static const char* const kDefaultLdPaths[] = {
 #if defined(__LP64__)
   "/vendor/lib64",
   "/system/lib64",
+#if defined(MTK_CIP_SUPPORT)
+  "/custom/lib64",
+#endif
 #else
   "/vendor/lib",
   "/system/lib",
+#if defined(MTK_CIP_SUPPORT)
+  "/custom/lib",
+#endif
 #endif
   nullptr
 };
@@ -185,6 +196,8 @@ size_t linker_get_error_buffer_size() {
 // This function is an empty stub where GDB locates a breakpoint to get notified
 // about linker activity.
 extern "C" void __attribute__((noinline)) __attribute__((visibility("default"))) rtld_db_dlactivity();
+
+static pthread_mutex_t g_soinfo_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static pthread_mutex_t g__r_debug_mutex = PTHREAD_MUTEX_INITIALIZER;
 static r_debug _r_debug = {1, nullptr, reinterpret_cast<uintptr_t>(&rtld_db_dlactivity), r_debug::RT_CONSISTENT, 0};
@@ -290,6 +303,7 @@ static soinfo* soinfo_alloc(const char* name, struct stat* file_stat, off64_t fi
 
   soinfo* si = new (g_soinfo_allocator.alloc()) soinfo(name, file_stat, file_offset);
 
+  ScopedPthreadMutexLocker locker(&g_soinfo_mutex);
   sonext->next = si;
   sonext = si;
 
@@ -302,6 +316,7 @@ static void soinfo_free(soinfo* si) {
     return;
   }
 
+  ScopedPthreadMutexLocker locker(&g_soinfo_mutex);
   if (si->base != 0 && si->size != 0) {
     munmap(reinterpret_cast<void*>(si->base), si->size);
   }
@@ -385,10 +400,11 @@ static void parse_LD_PRELOAD(const char* path) {
 _Unwind_Ptr dl_unwind_find_exidx(_Unwind_Ptr pc, int* pcount) {
   unsigned addr = (unsigned)pc;
 
+  ScopedPthreadMutexLocker locker(&g_soinfo_mutex);
   for (soinfo* si = solist; si != 0; si = si->next) {
     if ((addr >= si->base) && (addr < (si->base + si->size))) {
-        *pcount = si->ARM_exidx_count;
-        return (_Unwind_Ptr)si->ARM_exidx;
+      *pcount = si->ARM_exidx_count;
+      return (_Unwind_Ptr)si->ARM_exidx;
     }
   }
   *pcount = 0;
@@ -401,6 +417,8 @@ _Unwind_Ptr dl_unwind_find_exidx(_Unwind_Ptr pc, int* pcount) {
 // loaded libraries. gcc_eh does the rest.
 int dl_iterate_phdr(int (*cb)(dl_phdr_info* info, size_t size, void* data), void* data) {
   int rv = 0;
+
+  ScopedPthreadMutexLocker locker(&g_soinfo_mutex);
   for (soinfo* si = solist; si != nullptr; si = si->next) {
     dl_phdr_info dl_info;
     dl_info.dlpi_addr = si->link_map_head.l_addr;
@@ -2439,7 +2457,9 @@ static ElfW(Addr) __linker_init_post_relocation(KernelArgumentBlock& args, ElfW(
   needed_library_name_list.copy_to_array(needed_library_names, needed_libraries_count);
 
   if (needed_libraries_count > 0 && !find_libraries(needed_library_names, needed_libraries_count, needed_library_si, g_ld_preloads, ld_preloads_count, 0, nullptr)) {
+#if 0
     __libc_format_fd(2, "CANNOT LINK EXECUTABLE DEPENDENCIES: %s\n", linker_get_error_buffer());
+#endif
     exit(EXIT_FAILURE);
   }
 

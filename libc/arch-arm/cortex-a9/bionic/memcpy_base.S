@@ -133,7 +133,8 @@ ENTRY_PRIVATE(MEMCPY_BASE)
         strbcs      ip, [r0], #1
         strbcs      lr, [r0], #1
 
-        ldmfd       sp!, {r0, pc}
+        ldmfd       sp!, {r0, lr}
+        bx          lr
 END(MEMCPY_BASE)
 
 ENTRY_PRIVATE(MEMCPY_BASE_ALIGNED)

@@ -91,8 +91,6 @@ int utmpname(const char*);
 void setutent();
 struct utmp* getutent();
 
-int login_tty(int);
-
 __END_DECLS
 
 #endif /* _UTMP_H_ */

@@ -1,4 +1,9 @@
 /*
+* Copyright (C) 2014 MediaTek Inc.
+* Modification based on code covered by the mentioned copyright
+* and/or permission notice(s).
+*/
+/*
  * Copyright (C) 2008 The Android Open Source Project
  * All rights reserved.
  *
@@ -41,7 +46,9 @@
  * so try to guess it.
  */
 #ifndef __ARM_ARCH__
-#  if defined __ARM_ARCH_7__   || defined __ARM_ARCH_7A__ || \
+#  if defined __ARM_ARCH_8A__
+#    define __ARM_ARCH__ 8
+#  elif defined __ARM_ARCH_7__   || defined __ARM_ARCH_7A__ || \
         defined __ARM_ARCH_7R__  || defined __ARM_ARCH_7M__
 #    define __ARM_ARCH__ 7
 #  elif defined __ARM_ARCH_6__   || defined __ARM_ARCH_6J__ || \

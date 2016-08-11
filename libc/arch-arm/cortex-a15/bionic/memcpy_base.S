@@ -53,7 +53,11 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-.L_memcpy_base:
+ENTRY_PRIVATE(MEMCPY_BASE)
+        .cfi_def_cfa_offset 8
+        .cfi_rel_offset r0, 0
+        .cfi_rel_offset lr, 4
+
         // Assumes that n >= 0, and dst, src are valid pointers.
         // For any sizes less than 832 use the neon code that doesn't
         // care about the src alignment. This avoids any checks
@@ -72,6 +76,10 @@
         //       buffers so always go through the unaligned path for now.
         //cmp     r2, #832
         //bge     .L_check_alignment
+        //mov r3, #832
+        mov r3, #262144
+        cmp     r2, r3
+        blt     .L_check_alignment
 
 .L_copy_unknown_alignment:
         // Unknown alignment of src and dst.
@@ -164,6 +172,12 @@
         eor     r3, r0, r1
         ands    r3, r3, #0x3
         bne     .L_copy_unknown_alignment
+END(MEMCPY_BASE)
+
+ENTRY_PRIVATE(MEMCPY_BASE_ALIGNED)
+        .cfi_def_cfa_offset 8
+        .cfi_rel_offset r0, 0
+        .cfi_rel_offset lr, 4
 
         // To try and improve performance, stack layout changed,
         // i.e., not keeping the stack looking like users expect
@@ -175,7 +189,7 @@
         strd    r6, r7, [sp, #-8]!
         .cfi_adjust_cfa_offset 8
         .cfi_rel_offset r6, 0
-        .cfi_rel_offset r7, 4
+        .cfi_rel_offset r7, 0
         strd    r8, r9, [sp, #-8]!
         .cfi_adjust_cfa_offset 8
         .cfi_rel_offset r8, 0
@@ -205,8 +219,8 @@
         sub     r2, #4
 
 1:      // Can only get here if > 64 bytes to copy, so don't do check r2.
+#if 0
         sub     r2, #64
-
 2:      // Every loop iteration copies 64 bytes.
         .irp    offset, #0, #8, #16, #24, #32
         ldrd    r4, r5, [r1, \offset]
@@ -224,7 +238,8 @@
         // WARNING: If the ldrd and strd instructions get too far away
         //          from each other, performance suffers. Three loads
         //          in a row is the best tradeoff.
-        pld     [r1, #(64*16)]
+        pld     [r1, #(64*6)]
+        pldw     [r0, #(64*6)]
         strd    r4, r5, [r0, #40]
         strd    r6, r7, [r0, #48]
         strd    r8, r9, [r0, #56]
@@ -246,6 +261,22 @@
         add     r1, r1, #32
         add     r0, r0, #32
         sub     r2, r2, #32
+#else
+        subs        r2, #32  
+        blo         4f
+13:      /* Main copy loop, copying 64 bytes at a time */  
+        pld         [r1, #(64 * 4)]  
+        pldw         [r0, #(64 * 4)]  
+        ldmia       r1!, {r3, r4, r5, r6, r7, r8, r12, lr}  
+        subs        r2, r2, #32  
+        stmia       r0!, {r3, r4, r5, r6, r7, r8, r12, lr}  
+        blt 14f
+        ldmia       r1!, {r3, r4, r5, r6, r7, r8, r12, lr}  
+        subs        r2, r2, #32  
+        stmia       r0!, {r3, r4, r5, r6, r7, r8, r12, lr}  
+        bge         13b  
+14:
+#endif
 4:      // Less than 32 left.
         add     r2, r2, #32
         tst     r2, #0x10
@@ -281,27 +312,9 @@
 
         // Restore registers: optimized pop {r0, pc}
         ldrd    r8, r9, [sp], #8
-        .cfi_adjust_cfa_offset -8
-        .cfi_restore r8
-        .cfi_restore r9
         ldrd    r6, r7, [sp], #8
-        .cfi_adjust_cfa_offset -8
-        .cfi_restore r6
-        .cfi_restore r7
         ldrd    r4, r5, [sp], #8
-        .cfi_adjust_cfa_offset -8
-        .cfi_restore r4
-        .cfi_restore r5
         pop     {r0, pc}
-
-        // Put the cfi directives back for the below instructions.
-        .cfi_adjust_cfa_offset 24
-        .cfi_rel_offset r4, 0
-        .cfi_rel_offset r5, 4
-        .cfi_rel_offset r6, 8
-        .cfi_rel_offset r7, 12
-        .cfi_rel_offset r8, 16
-        .cfi_rel_offset r9, 20
 
 .L_dst_not_word_aligned:
         // Align dst to word.
@@ -323,12 +336,4 @@
 
         // Src is guaranteed to be at least word aligned by this point.
         b       .L_word_aligned
-
-        // Undo any cfi directives from above.
-        .cfi_adjust_cfa_offset -24
-        .cfi_restore r4
-        .cfi_restore r5
-        .cfi_restore r6
-        .cfi_restore r7
-        .cfi_restore r8
-        .cfi_restore r9
+END(MEMCPY_BASE_ALIGNED)

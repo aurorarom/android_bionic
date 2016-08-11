@@ -36,6 +36,10 @@ LOCAL_CONLYFLAGS += \
 LOCAL_CPPFLAGS += \
     -std=gnu++11 \
 
+ifeq ($(strip $(MTK_CIP_SUPPORT)),yes)
+LOCAL_CPPFLAGS += -DMTK_CIP_SUPPORT
+endif
+
 # We need to access Bionic private headers in the linker.
 LOCAL_CFLAGS += -I$(LOCAL_PATH)/../libc/
 

@@ -459,11 +459,8 @@ long double	tanhl(long double);
 long double	tanl(long double);
 long double	tgammal(long double);
 long double	truncl(long double);
-#endif /* __ISO_C_VISIBLE >= 1999 */
 
-#if __BSD_VISIBLE
-long double	lgammal_r(long double, int *);
-#endif
+#endif /* __ISO_C_VISIBLE >= 1999 */
 
 #if defined(_GNU_SOURCE)
 void sincos(double, double*, double*);
